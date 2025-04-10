@@ -4,7 +4,7 @@ import flappy_bird_gymnasium
 import gymnasium
 from matplotlib import pyplot as plt
 import numpy as np
-from dqn import DQN
+from ddqn import DQN
 import torch
 from experience_replay import ReplayMemory
 import itertools
@@ -14,11 +14,15 @@ import torch.nn as nn
 import os
 import matplotlib
 import psutil
+
+import graph
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 RUNS_DIR = "runs"
 os.makedirs(RUNS_DIR, exist_ok=True)
 matplotlib.use('Agg')
+g = graph.ShowGraph()
+torch.set_num_threads(22)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 class Agent:
     def __init__(self, hyperparameters_set):
@@ -95,15 +99,13 @@ class Agent:
         # env = gymnasium.make("FlappyBird-v0", render_mode="human" if render else None, use_lidar=False)
         env = gymnasium.make(self.env_id, render_mode='human' if render else None, **self.env_make_params)
         
-
         num_states = env.observation_space.shape[0]
         num_actions = env.action_space.n
-
-
         
         reward_per_episode = []
         epsilon_history = []
         optimize_every_n_steps = 10
+        print(f'state: {num_states}  action: {num_actions}')
         policy_dqn = DQN(num_states,num_actions,self.fc1_nodes,self.enable_dueling_dqn ).to(device)
 
         if is_training:
@@ -111,7 +113,6 @@ class Agent:
 
                 print(f"Loading pretrained model from {self.pretrained_model}")
                 policy_dqn.load_state_dict(torch.load(self.pretrained_model))
-                target_dqn.load_state_dict(policy_dqn.state_dict())
                 print(f"Loaded pretrained model from {self.pretrained_model}")
             memory = ReplayMemory(self.replay_memory_size)
             epsilon = self.epsilon_init
@@ -131,12 +132,13 @@ class Agent:
 
         #  Training loop
         for episode in itertools.count():
+            
             state, _ = env.reset()
             state = torch.as_tensor(state,dtype=torch.float,device=device)
 
             terminated = False
             episode_reward = 0.0
-
+            landed_bonus_given = False
             while (not terminated and episode_reward < self.stop_on_reward):
                 # Next action:
                 # (feed the observation to your agent here)
@@ -149,8 +151,19 @@ class Agent:
 
                 # Processing:
                 new_state, reward, terminated, _, info = env.step(action.item())
-                
-                episode_reward += reward
+                shaped_reward = reward
+                if new_state[3] < 0:  # vel_y < 0 (ลง)
+                    shaped_reward += 0.02
+
+                # ถ้า lander ยกตัวขึ้น = ลงโทษเล็กน้อย
+                if new_state[3] > 0:  # vel_y > 0 (ขึ้น)
+                    shaped_reward -= 0.2
+
+                # ถ้าแตะพื้น = ให้รางวัลเยอะๆ
+                if not landed_bonus_given and (new_state[6] > 0.5 or new_state[7] > 0.5):
+                    shaped_reward += 10.0
+                    landed_bonus_given = True
+                episode_reward += shaped_reward
 
                 new_state = torch.as_tensor(new_state,dtype=torch.float,device=device)
                 reward = torch.as_tensor(reward,dtype=torch.float,device=device)
@@ -166,14 +179,11 @@ class Agent:
                             mini_batch = memory.sample(self.mini_batch_size)
                             self.optimize(mini_batch,policy_dqn,target_dqn)
 
-                            
-                            if step_count > self.network_sync_rate:
-                                target_dqn.load_state_dict(policy_dqn.state_dict())
-                                step_count = 0
                 state = new_state
 
             reward_per_episode.append(episode_reward)
-
+            if episode % 50 == 0:
+                print(f'{datetime.datetime.now().strftime(DATE_FORMAT)} Episode: {episode} reward {episode_reward}')
             if is_training:
                 if episode_reward > best_reward:
                     log_message = f"{datetime.datetime.now().strftime(DATE_FORMAT)}: New best reward: {episode_reward} at episode {episode}"
@@ -186,8 +196,8 @@ class Agent:
                     best_reward = episode_reward
 
                 current_time = datetime.datetime.now()
-                if current_time - last_graph_update_time > datetime.timedelta(seconds=60):
-                    self.save_graph(reward_per_episode, epsilon_history)
+                if current_time - last_graph_update_time > datetime.timedelta(seconds=10):
+                    g.save_graph(reward_per_episode, epsilon_history,file=self.GRAPH_FILE)
                     last_graph_update_time = current_time
                 if len(memory) > self.mini_batch_size:
                                             #sample from memory
@@ -200,7 +210,7 @@ class Agent:
                         target_dqn.load_state_dict(policy_dqn.state_dict())
                         step_count = 0
                     
-            env.close() 
+        env.close() 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train or test model')
@@ -210,10 +220,10 @@ if __name__ == "__main__":
 
     dql = Agent(hyperparameters_set=args.hyperparameters)
     if args.train:
-        dql.run(is_training=True)
+        dql.run(is_training=True,render=False)
     else:
         dql.run(is_training=False,render=True)
 
     agent = Agent('cartpole1')
-    agent.run(is_training=True,render=True)
-    # agent.run(is_training=False,render=True)
+    # agent.run(is_training=True,render=True)
+    agent.run(is_training=False,render=True)

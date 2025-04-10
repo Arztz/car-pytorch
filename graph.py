@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
-import numppy as np
+import numpy as np
 
 class ShowGraph:
-    def save_graph(self,reward_per_episode, epsilon_history):
+    def save_graph(self,reward_per_episode, epsilon_history,file):
         fig = plt.figure(1)
 
         mean_reward = np.zeros(len(reward_per_episode))
@@ -19,7 +19,7 @@ class ShowGraph:
 
         plt.subplots_adjust(wspace=1.0, hspace=1.0)
 
-        fig.savefig(self.GRAPH_FILE)
+        fig.savefig(file)
         plt.close()
 
 
