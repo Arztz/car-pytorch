@@ -139,7 +139,10 @@ class Agent:
             terminated = False
             episode_reward = 0.0
             landed_bonus_given = False
+            max_timesteps = 1000
+            steps = 0
             while (not terminated and episode_reward < self.stop_on_reward):
+                steps += 1
                 # Next action:
                 # (feed the observation to your agent here)
                 if is_training and random.random() < epsilon:
@@ -152,17 +155,22 @@ class Agent:
                 # Processing:
                 new_state, reward, terminated, _, info = env.step(action.item())
                 shaped_reward = reward
-                if new_state[3] < 0:  # vel_y < 0 (ลง)
-                    shaped_reward += 0.02
+                if max_timesteps < steps:
+                    shaped_reward -= 100
+                    terminated = True
+                else:
+                    shaped_reward -= 0.01
+                # if new_state[3] < 0:  # vel_y < 0 (ลง)
+                #     shaped_reward += 0.02
 
-                # ถ้า lander ยกตัวขึ้น = ลงโทษเล็กน้อย
-                if new_state[3] > 0:  # vel_y > 0 (ขึ้น)
-                    shaped_reward -= 0.2
+                # # ถ้า lander ยกตัวขึ้น = ลงโทษเล็กน้อย
+                # if new_state[3] > 0:  # vel_y > 0 (ขึ้น)
+                #     shaped_reward -= 0.2
 
-                # ถ้าแตะพื้น = ให้รางวัลเยอะๆ
-                if not landed_bonus_given and (new_state[6] > 0.5 or new_state[7] > 0.5):
-                    shaped_reward += 10.0
-                    landed_bonus_given = True
+                # # ถ้าแตะพื้น = ให้รางวัลเยอะๆ
+                # if not landed_bonus_given and (new_state[6] > 0.5 or new_state[7] > 0.5):
+                #     shaped_reward += 10.0
+                #     landed_bonus_given = True
                 episode_reward += shaped_reward
 
                 new_state = torch.as_tensor(new_state,dtype=torch.float,device=device)
@@ -172,15 +180,16 @@ class Agent:
                 if is_training:
                     memory.append((state.detach(),action.detach() if action.requires_grad else action,new_state.detach(),reward.detach(),terminated))
                     step_count += 1
-                    if step_count % optimize_every_n_steps == 0:
-                        if len(memory) > self.mini_batch_size:
+                    # if step_count % optimize_every_n_steps == 0:
+                    #     if len(memory) > self.mini_batch_size:
 
-                            #sample from memory
-                            mini_batch = memory.sample(self.mini_batch_size)
-                            self.optimize(mini_batch,policy_dqn,target_dqn)
+                    #         #sample from memory
+                    #         mini_batch = memory.sample(self.mini_batch_size)
+                    #         self.optimize(mini_batch,policy_dqn,target_dqn)
 
                 state = new_state
-
+            if max_timesteps>steps:
+                steps = 0
             reward_per_episode.append(episode_reward)
             if episode % 50 == 0:
                 print(f'{datetime.datetime.now().strftime(DATE_FORMAT)} Episode: {episode} reward {episode_reward}')

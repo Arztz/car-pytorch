@@ -1,9 +1,9 @@
 lunar:
   env_id: LunarLander-v3
-  replay_memory_size: 100000
-  mini_batch_size: 512
+  replay_memory_size: 200000
+  mini_batch_size: 256
   epsilon_init: 1
-  epsilon_decay: 0.99995
+  epsilon_decay: 0.9995
   epsilon_min: 0.1
   network_sync_rate: 200
   learning_rate_a: 0.0001
@@ -14,5 +14,24 @@ lunar:
   #   enable_wind: True
   #   continuous: False
   # pretrained_model: ./runs/flappybird-dqn.pt
+  enable_double_dqn: True
+  enable_dueling_dqn: True
+
+re-lunar:
+  env_id: LunarLander-v3
+  replay_memory_size: 200000
+  mini_batch_size: 256
+  epsilon_init: 0.3
+  epsilon_decay: 0.9995
+  epsilon_min: 0.1
+  network_sync_rate: 200
+  learning_rate_a: 0.0001
+  discount_factor_g: 0.99
+  stop_on_reward: 100000
+  fc1_nodes: 256
+  # env_make_params:
+  #   enable_wind: True
+  #   continuous: False
+  pretrained_model: ./runs/lunar.pt
   enable_double_dqn: True
   enable_dueling_dqn: True
