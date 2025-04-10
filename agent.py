@@ -156,7 +156,7 @@ class Agent:
                 new_state, reward, terminated, _, info = env.step(action.item())
                 shaped_reward = reward
                 if max_timesteps < steps:
-                    shaped_reward -= 100
+                    shaped_reward -= 5
                     terminated = True
                 else:
                     shaped_reward -= 0.01
