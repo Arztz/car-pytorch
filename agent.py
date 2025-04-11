@@ -1,10 +1,11 @@
 import argparse
 import datetime
+import cv2
 import flappy_bird_gymnasium
 import gymnasium
 from matplotlib import pyplot as plt
 import numpy as np
-from ddqn import DQN
+from cnn import CNN
 import torch
 from experience_replay import ReplayMemory
 import itertools
@@ -58,6 +59,7 @@ class Agent:
         states,actions,new_states,rewards,terminations = zip(*mini_batch)
 
         states = torch.stack(states).to(device)
+        actions = [a if a.shape == torch.Size([1]) else torch.tensor([a], dtype=torch.long, device=device) for a in actions]
         actions = torch.stack(actions).to(device)   
         new_states = torch.stack(new_states).to(device) 
         rewards = torch.stack(rewards).to(device)   
@@ -71,7 +73,7 @@ class Agent:
                 target_q = rewards + (1-terminations )* self.discount_factor_g  * target_dqn(new_states).max(dim=1)[0]
 
 
-        current_q = policy_dqn(states).gather(dim=1,index=actions.unsqueeze(dim=1)).squeeze()
+        current_q = policy_dqn(states).gather(dim=1,index=actions).squeeze()
 
         loss = self.loss_fn(current_q,target_q)
 
@@ -99,14 +101,15 @@ class Agent:
         # env = gymnasium.make("FlappyBird-v0", render_mode="human" if render else None, use_lidar=False)
         env = gymnasium.make(self.env_id, render_mode='human' if render else None, **self.env_make_params)
         
-        num_states = env.observation_space.shape[0]
+        num_states = 27648
+
         num_actions = env.action_space.n
         
         reward_per_episode = []
         epsilon_history = []
         optimize_every_n_steps = 10
         print(f'state: {num_states}  action: {num_actions}')
-        policy_dqn = DQN(num_states,num_actions,self.fc1_nodes,self.enable_dueling_dqn ).to(device)
+        policy_dqn = CNN(num_actions,self.enable_dueling_dqn ).to(device)
 
         if is_training:
             if self.pretrained_model and os.path.exists(self.pretrained_model):
@@ -117,7 +120,7 @@ class Agent:
             memory = ReplayMemory(self.replay_memory_size)
             epsilon = self.epsilon_init
             
-            target_dqn = DQN(num_states,num_actions,self.fc1_nodes,self.enable_dueling_dqn  ).to(device)
+            target_dqn = CNN(num_actions,self.enable_dueling_dqn  ).to(device)
             target_dqn.load_state_dict(policy_dqn.state_dict())
 
             step_count = 0
@@ -133,8 +136,9 @@ class Agent:
         #  Training loop
         for episode in itertools.count():
             
-            state, _ = env.reset()
-            state = torch.as_tensor(state,dtype=torch.float,device=device)
+            state, _ = env.reset()    
+            state = image_preprocessing(state)       
+            state = torch.as_tensor(state,dtype=torch.float,device=device).unsqueeze(0)
 
             terminated = False
             episode_reward = 0.0
@@ -150,16 +154,19 @@ class Agent:
                     action = torch.as_tensor(action,dtype=torch.long,device=device)
                 else:
                     with torch.no_grad():
-                        action = policy_dqn(state.unsqueeze(dim=0)).squeeze().argmax()
+                        action = policy_dqn(state.unsqueeze(0)).argmax(dim=1)
 
                 # Processing:
-                new_state, reward, terminated, _, info = env.step(action.item())
+                # print(f"action: {action}, type: {type(action)}")
+                new_state, reward, terminated, _, info = env.step(int(action.item()))
+                new_state = image_preprocessing(new_state)
+
                 shaped_reward = reward
                 if max_timesteps < steps:
-                    shaped_reward -= 5
+                    # shaped_reward -= 5
                     terminated = True
-                else:
-                    shaped_reward -= 0.01
+                # else:
+                #     shaped_reward -= 0.01
                 # if new_state[3] < 0:  # vel_y < 0 (ลง)
                 #     shaped_reward += 0.02
 
@@ -173,7 +180,7 @@ class Agent:
                 #     landed_bonus_given = True
                 episode_reward += shaped_reward
 
-                new_state = torch.as_tensor(new_state,dtype=torch.float,device=device)
+                new_state = torch.as_tensor(new_state,dtype=torch.float,device=device).unsqueeze(0)
                 reward = torch.as_tensor(reward,dtype=torch.float,device=device)
                 
 
@@ -220,6 +227,11 @@ class Agent:
                         step_count = 0
                     
         env.close() 
+
+def image_preprocessing(img):
+  img = cv2.resize(img, dsize=(84, 84))
+  img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY) / 255.0
+  return img
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train or test model')

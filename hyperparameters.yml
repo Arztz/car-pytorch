@@ -1,5 +1,5 @@
-lunar:
-  env_id: LunarLander-v3
+car:
+  env_id: CarRacing-v3
   replay_memory_size: 200000
   mini_batch_size: 1024 
   epsilon_init: 1
@@ -10,16 +10,16 @@ lunar:
   discount_factor_g: 0.99
   stop_on_reward: 100000
   fc1_nodes: 256
-  # env_make_params:
+  env_make_params:
   #   enable_wind: True
-  #   continuous: False
+    continuous: False
   # pretrained_model: ./runs/flappybird-dqn.pt
   enable_double_dqn: True
   enable_dueling_dqn: True
   num_envs: 8
 
-re-lunar:
-  env_id: LunarLander-v3
+re-car:
+  env_id: CarRacing-v3
   replay_memory_size: 200000
   mini_batch_size: 256
   epsilon_init: 0.3
@@ -30,10 +30,10 @@ re-lunar:
   discount_factor_g: 0.99
   stop_on_reward: 100000
   fc1_nodes: 256
-  # env_make_params:
+  env_make_params:
   #   enable_wind: True
-  #   continuous: False
-  pretrained_model: ./runs/lunar-200.pt
+    continuous: False
+  pretrained_model: ./runs/car.pt
   enable_double_dqn: True
   enable_dueling_dqn: True
   num_envs: 8
