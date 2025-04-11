@@ -1,7 +1,6 @@
 import argparse
 import datetime
 import cv2
-import flappy_bird_gymnasium
 import gymnasium
 from matplotlib import pyplot as plt
 import numpy as np
@@ -25,6 +24,9 @@ matplotlib.use('Agg')
 g = graph.ShowGraph()
 torch.set_num_threads(22)
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+
 class Agent:
     def __init__(self, hyperparameters_set):
         with open('hyperparameters.yml', 'r') as file:
@@ -49,7 +51,7 @@ class Agent:
 
         self.loss_fn = nn.MSELoss()
         self.optimizer = None
-
+        self.scaler = torch.amp.GradScaler(device=device)
 
         self.LOG_FILE = os.path.join(RUNS_DIR, f'{hyperparameters_set}.log')
         self.MODEL_FILE = os.path.join(RUNS_DIR, f'{hyperparameters_set}.pt')
@@ -64,7 +66,7 @@ class Agent:
         new_states = torch.stack(new_states).to(device) 
         rewards = torch.stack(rewards).to(device)   
         terminations = torch.as_tensor(terminations).float().to(device)
-        with torch.no_grad():
+        with torch.amp.autocast(device_type=device):
 
             if self.enable_double_dqn:
                 best_actions_from_policy = policy_dqn(new_states).argmax(dim=1)
@@ -78,8 +80,11 @@ class Agent:
         loss = self.loss_fn(current_q,target_q)
 
         self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+        # loss.backward()
+        # self.optimizer.step()
+        self.scaler.scale(loss).backward()
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
 
     def run(self,is_training=True,render=False):
 
@@ -99,7 +104,7 @@ class Agent:
                 log_file.write(log_message+ '\n')
 
         # env = gymnasium.make("FlappyBird-v0", render_mode="human" if render else None, use_lidar=False)
-        env = gymnasium.make(self.env_id, render_mode='human' if render else None, **self.env_make_params)
+        env = gymnasium.make(self.env_id, render_mode='rgb_array' if render else None, **self.env_make_params)
         
         num_states = 27648
 
@@ -143,7 +148,7 @@ class Agent:
             terminated = False
             episode_reward = 0.0
             landed_bonus_given = False
-            max_timesteps = 1000
+            max_timesteps = 2000
             steps = 0
             while (not terminated and episode_reward < self.stop_on_reward):
                 steps += 1
@@ -179,7 +184,10 @@ class Agent:
                 #     shaped_reward += 10.0
                 #     landed_bonus_given = True
                 episode_reward += shaped_reward
-
+                if episode_reward < -100:  # ✳️ ปรับ threshold ตามที่เหมาะ
+                    terminated = True
+                    print(f"🚫 Episode terminated early at step {steps} due to poor reward ({episode_reward:.2f})")
+                    
                 new_state = torch.as_tensor(new_state,dtype=torch.float,device=device).unsqueeze(0)
                 reward = torch.as_tensor(reward,dtype=torch.float,device=device)
                 
@@ -188,11 +196,8 @@ class Agent:
                     memory.append((state.detach(),action.detach() if action.requires_grad else action,new_state.detach(),reward.detach(),terminated))
                     step_count += 1
                     # if step_count % optimize_every_n_steps == 0:
-                    #     if len(memory) > self.mini_batch_size:
-
-                    #         #sample from memory
-                    #         mini_batch = memory.sample(self.mini_batch_size)
-                    #         self.optimize(mini_batch,policy_dqn,target_dqn)
+                    #     mini_batch = memory.sample(self.mini_batch_size)
+                    #     self.optimize(mini_batch,policy_dqn,target_dqn)
 
                 state = new_state
             if max_timesteps>steps:
