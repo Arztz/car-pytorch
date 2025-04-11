@@ -21,8 +21,8 @@ car:
 re-car:
   env_id: CarRacing-v3
   replay_memory_size: 200000
-  mini_batch_size: 1024
-  epsilon_init: 1
+  mini_batch_size: 256
+  epsilon_init: 0.3
   epsilon_decay: 0.9995
   epsilon_min: 0.1
   network_sync_rate: 200

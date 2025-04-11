@@ -14,7 +14,7 @@ import torch.nn as nn
 import os
 import matplotlib
 import psutil
-
+from torchvision import transforms
 import graph
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -25,7 +25,12 @@ g = graph.ShowGraph()
 torch.set_num_threads(22)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-
+transform = transforms.Compose([
+    transforms.ToPILImage(),                    # แปลงจาก numpy -> PIL
+    transforms.Resize((84, 84)),               # ปรับขนาด
+    transforms.Grayscale(),                    # แปลงเป็นภาพขาวดำ
+    transforms.ToTensor(),                     # แปลงเป็น tensor และ normalize ให้อยู่ใน [0,1]
+])
 
 class Agent:
     def __init__(self, hyperparameters_set):
@@ -104,7 +109,7 @@ class Agent:
                 log_file.write(log_message+ '\n')
 
         # env = gymnasium.make("FlappyBird-v0", render_mode="human" if render else None, use_lidar=False)
-        env = gymnasium.make(self.env_id, render_mode='rgb_array' if render else None, **self.env_make_params)
+        env = gymnasium.make(self.env_id, render_mode='human' if render else 'rgb_array', **self.env_make_params)
         
         num_states = 27648
 
@@ -118,7 +123,6 @@ class Agent:
 
         if is_training:
             if self.pretrained_model and os.path.exists(self.pretrained_model):
-
                 print(f"Loading pretrained model from {self.pretrained_model}")
                 policy_dqn.load_state_dict(torch.load(self.pretrained_model))
                 print(f"Loaded pretrained model from {self.pretrained_model}")
@@ -136,6 +140,7 @@ class Agent:
         else:
             # Load the model
             policy_dqn.load_state_dict(torch.load(self.MODEL_FILE))
+            print(f"Loaded pretrained model from {self.MODEL_FILE}")
             policy_dqn.eval()
 
         #  Training loop
@@ -184,9 +189,15 @@ class Agent:
                 #     shaped_reward += 10.0
                 #     landed_bonus_given = True
                 episode_reward += shaped_reward
+                if shaped_reward < 0:
+                    minus_count +=1
+                else:
+                    minus_count = 0
+                if minus_count > 100:
+                    terminated = True
                 if episode_reward < -100:  # ✳️ ปรับ threshold ตามที่เหมาะ
                     terminated = True
-                    print(f"🚫 Episode terminated early at step {steps} due to poor reward ({episode_reward:.2f})")
+                    print(f"🚫 Episode {episode} terminated early at step {steps} due to poor reward ({episode_reward:.2f})")
                     
                 new_state = torch.as_tensor(new_state,dtype=torch.float,device=device).unsqueeze(0)
                 reward = torch.as_tensor(reward,dtype=torch.float,device=device)
@@ -234,9 +245,7 @@ class Agent:
         env.close() 
 
 def image_preprocessing(img):
-  img = cv2.resize(img, dsize=(84, 84))
-  img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY) / 255.0
-  return img
+    return transform(img).squeeze(0)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train or test model')
