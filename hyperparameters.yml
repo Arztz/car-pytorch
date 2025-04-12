@@ -1,34 +1,39 @@
-{name}-dqn:
-  env_id: {gymname}
-  replay_memory_size: 100000
-  mini_batch_size: 128
+car:
+  env_id: CarRacing-v3
+  replay_memory_size: 200000
+  mini_batch_size: 1024 
   epsilon_init: 1
-  epsilon_decay: 0.99995
-  epsilon_min: 0.05
-  network_sync_rate: 10
+  epsilon_decay: 0.9995
+  epsilon_min: 0.1
+  network_sync_rate: 200
   learning_rate_a: 0.0001
   discount_factor_g: 0.99
   stop_on_reward: 100000
-  fc1_nodes: 512
+  fc1_nodes: 256
   env_make_params:
-    use_lidar: False
-  enable_double_dqn: False
-  enable_dueling_dqn: True
-
-{name}-ddqn:
-  env_id: {gymname}
-  replay_memory_size: 100000
-  mini_batch_size: 128
-  epsilon_init: 1
-  epsilon_decay: 0.99995
-  epsilon_min: 0.05
-  network_sync_rate: 10
-  learning_rate_a: 0.0001
-  discount_factor_g: 0.99
-  stop_on_reward: 100000
-  fc1_nodes: 512
-  env_make_params:
-    use_lidar: False
-  pretrained_model: ./runs/flappybird-dqn.pt
+  #   enable_wind: True
+    continuous: False
+  # pretrained_model: ./runs/flappybird-dqn.pt
   enable_double_dqn: True
   enable_dueling_dqn: True
+  num_envs: 8
+
+re-car:
+  env_id: CarRacing-v3
+  replay_memory_size: 200000
+  mini_batch_size: 256
+  epsilon_init: 0.4
+  epsilon_decay: 0.9995
+  epsilon_min: 0.1
+  network_sync_rate: 200
+  learning_rate_a: 0.0001
+  discount_factor_g: 0.99
+  stop_on_reward: 100000
+  fc1_nodes: 256
+  env_make_params:
+  #   enable_wind: True
+    continuous: False
+  pretrained_model: ./runs/re-car-898.pt
+  enable_double_dqn: True
+  enable_dueling_dqn: True
+  num_envs: 8
