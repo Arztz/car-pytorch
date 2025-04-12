@@ -22,7 +22,7 @@ re-car:
   env_id: CarRacing-v3
   replay_memory_size: 200000
   mini_batch_size: 256
-  epsilon_init: 0.3
+  epsilon_init: 0.4
   epsilon_decay: 0.9995
   epsilon_min: 0.1
   network_sync_rate: 200
@@ -33,7 +33,7 @@ re-car:
   env_make_params:
   #   enable_wind: True
     continuous: False
-  pretrained_model: ./runs/re-car-572.pt
+  pretrained_model: ./runs/re-car-898.pt
   enable_double_dqn: True
   enable_dueling_dqn: True
   num_envs: 8

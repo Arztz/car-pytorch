@@ -63,24 +63,27 @@ class Agent:
         self.GRAPH_FILE = os.path.join(RUNS_DIR, f'{hyperparameters_set}.png')
 
     def optimize(self, mini_batch, policy_dqn, target_dqn):
-        states,actions,new_states,rewards,terminations = zip(*mini_batch)
+        states,extra_info,actions,new_states,new_extra_info,rewards,terminations = zip(*mini_batch)
 
         states = torch.stack(states).to(device)
+        extra_info = torch.stack(extra_info).to(device)
         actions = [a if a.shape == torch.Size([1]) else torch.tensor([a], dtype=torch.long, device=device) for a in actions]
         actions = torch.stack(actions).to(device)   
         new_states = torch.stack(new_states).to(device) 
+        new_extra_info = torch.stack(new_extra_info).to(device)
         rewards = torch.stack(rewards).to(device)   
         terminations = torch.as_tensor(terminations).float().to(device)
+
         with torch.amp.autocast(device_type=device):
 
             if self.enable_double_dqn:
-                best_actions_from_policy = policy_dqn(new_states).argmax(dim=1)
-                target_q = rewards + (1-terminations )* self.discount_factor_g  * target_dqn(new_states).gather(dim=1,index=best_actions_from_policy.unsqueeze(dim=1)).squeeze()
+                best_actions_from_policy = policy_dqn(new_states,new_extra_info).argmax(dim=1)
+                target_q = rewards + (1-terminations )* self.discount_factor_g  * target_dqn(new_states,new_extra_info).gather(dim=1,index=best_actions_from_policy.unsqueeze(dim=1)).squeeze()
             else:
-                target_q = rewards + (1-terminations )* self.discount_factor_g  * target_dqn(new_states).max(dim=1)[0]
+                target_q = rewards + (1-terminations )* self.discount_factor_g  * target_dqn(new_states,new_extra_info).max(dim=1)[0]
 
 
-        current_q = policy_dqn(states).gather(dim=1,index=actions).squeeze()
+        current_q = policy_dqn(states,extra_info).gather(dim=1,index=actions).squeeze()
 
         loss = self.loss_fn(current_q,target_q)
 
@@ -153,10 +156,24 @@ class Agent:
             terminated = False
             episode_reward = 0.0
             landed_bonus_given = False
-            max_timesteps = 2000
+
+            max_timesteps = 4000
             steps = 0
             while (not terminated and episode_reward < self.stop_on_reward):
                 steps += 1
+                #more information
+                car = env.unwrapped.car
+
+                # ความเร็ว
+                speed = np.linalg.norm(car.hull.linearVelocity)
+
+                # มุมพวงมาลัย
+                steering = car.wheels[0].joint.angle  # ล้อหน้า
+
+                # ความเร็วเชิงมุม (เข้าโค้งแรง)
+                angular_velocity = car.hull.angularVelocity
+                extra_info = torch.tensor([[speed, steering, angular_velocity]], dtype=torch.float32).to(device)  # shape: (1, 3)
+
                 # Next action:
                 # (feed the observation to your agent here)
                 if is_training and random.random() < epsilon:
@@ -164,12 +181,27 @@ class Agent:
                     action = torch.as_tensor(action,dtype=torch.long,device=device)
                 else:
                     with torch.no_grad():
-                        action = policy_dqn(state.unsqueeze(0)).argmax(dim=1)
+                        action = policy_dqn(state.unsqueeze(0),extra_info).argmax(dim=1)
 
                 # Processing:
                 # print(f"action: {action}, type: {type(action)}")
                 new_state, reward, terminated, _, info = env.step(int(action.item()))
                 new_state = image_preprocessing(new_state)
+
+                #more information
+                car = env.unwrapped.car
+
+                # ความเร็ว
+                speed = np.linalg.norm(car.hull.linearVelocity)
+
+                # มุมพวงมาลัย
+                steering = car.wheels[0].joint.angle  # ล้อหน้า
+
+                # ความเร็วเชิงมุม (เข้าโค้งแรง)
+                angular_velocity = car.hull.angularVelocity
+                new_extra_info = torch.tensor([[speed, steering, angular_velocity]], dtype=torch.float32).to(device)  # shape: (1, 3)
+
+
 
                 shaped_reward = reward
                 if max_timesteps < steps:
@@ -204,7 +236,7 @@ class Agent:
                 
 
                 if is_training:
-                    memory.append((state.detach(),action.detach() if action.requires_grad else action,new_state.detach(),reward.detach(),terminated))
+                    memory.append((state.detach(),extra_info.detach(),action.detach() if action.requires_grad else action,new_state.detach(),new_extra_info.detach(),reward.detach(),terminated))
                     step_count += 1
                     # if step_count % optimize_every_n_steps == 0:
                     #     mini_batch = memory.sample(self.mini_batch_size)

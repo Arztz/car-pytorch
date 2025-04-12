@@ -18,7 +18,7 @@ class CNN(nn.Module):
 
         self.flattened_size = 64 * 7 * 7  # ขึ้นกับ input image size
 
-        self.fc1 = nn.Linear(self.flattened_size, 512)
+        self.fc1 = nn.Linear(self.flattened_size +3 , 512)
 
         if self.enable_dueling_dqn:
             self.fc_value = nn.Linear(512, 256)
@@ -29,9 +29,13 @@ class CNN(nn.Module):
         else:
             self.output = nn.Linear(512, action_dim)
 
-    def forward(self, x):  # x shape: (batch_size, 1, 84, 84)
+    def forward(self, x,extra_info):  # x shape: (batch_size, 1, 84, 84)
         x = self.cnn(x)
         x = x.view(x.size(0), -1)
+        # ✅ แปลง extra_info เป็น 2D: (batch, 3)
+        if extra_info.dim() > 2:
+            extra_info = extra_info.view(extra_info.size(0), -1)
+        x = torch.cat((x, extra_info), dim=1)  # concat เพิ่มข้อมูลเสริม
         x = F.relu(self.fc1(x))
 
         if self.enable_dueling_dqn:
